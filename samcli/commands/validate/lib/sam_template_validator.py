@@ -11,7 +11,7 @@ from boto3.session import Session
 
 from samcli.lib.utils.packagetype import ZIP, IMAGE
 from samcli.lib.utils.resources import AWS_SERVERLESS_FUNCTION
-from samcli.yamlhelper import yaml_dump
+from samcli.yamlhelper import yaml_dump, parse_yaml_file
 from .exceptions import InvalidSamDocumentException
 
 LOG = logging.getLogger(__name__)
@@ -113,10 +113,14 @@ class SamTemplateValidator:
             if resource_type == "AWS::Serverless::Api":
                 if "DefinitionUri" in resource_dict:
                     SamTemplateValidator._update_to_s3_uri("DefinitionUri", resource_dict)
+                if "DefinitionBody" in resource_dict:
+                    SamTemplateValidator._check_definition_body(resource_dict)
 
             if resource_type == "AWS::Serverless::HttpApi":
                 if "DefinitionUri" in resource_dict:
                     SamTemplateValidator._update_to_s3_uri("DefinitionUri", resource_dict)
+                if "DefinitionBody" in resource_dict:
+                    SamTemplateValidator._check_definition_body(resource_dict)
 
             if resource_type == "AWS::Serverless::StateMachine":
                 if "DefinitionUri" in resource_dict:
@@ -180,3 +184,29 @@ class SamTemplateValidator:
             return
 
         resource_property_dict[property_key] = s3_uri_value
+
+    @staticmethod
+    def _check_definition_body(resource_property_dict):
+        body_dict = resource_property_dict.get("DefinitionBody", {})
+
+        if "Fn::Transform" not in body_dict:
+            return
+
+        transform_dict = body_dict.get("Fn::Transform", {})
+        if "Parameters" not in transform_dict:
+            return
+
+        parameters_dict = transform_dict.get("Parameters", {})
+        if "Location" not in parameters_dict:
+            return
+
+        location_prop = parameters_dict.get("Location", ".")
+
+        try:
+            definition_body = parse_yaml_file(location_prop)
+
+            # replace the definition body from the file
+            resource_property_dict["DefinitionBody"] = definition_body
+            LOG.debug("Imported definition body from %s", location_prop)
+        except Exception as e:
+            LOG.debug("Error importing definition body from %s -> %s", location_prop, e.message)
