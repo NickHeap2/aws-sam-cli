@@ -3,6 +3,7 @@ Library for Validating Sam Templates
 """
 import logging
 import functools
+import os.path
 
 from samtranslator.public.exceptions import InvalidDocumentException
 from samtranslator.parser import parser
@@ -113,13 +114,13 @@ class SamTemplateValidator:
             if resource_type == "AWS::Serverless::Api":
                 if "DefinitionUri" in resource_dict:
                     SamTemplateValidator._update_to_s3_uri("DefinitionUri", resource_dict)
-                if "DefinitionBody" in resource_dict:
+                if "DefinitionBody" in resource_dict and "CorsConfiguration" in resource_dict:
                     SamTemplateValidator._check_definition_body(resource_dict)
 
             if resource_type == "AWS::Serverless::HttpApi":
                 if "DefinitionUri" in resource_dict:
                     SamTemplateValidator._update_to_s3_uri("DefinitionUri", resource_dict)
-                if "DefinitionBody" in resource_dict:
+                if "DefinitionBody" in resource_dict and "CorsConfiguration" in resource_dict:
                     SamTemplateValidator._check_definition_body(resource_dict)
 
             if resource_type == "AWS::Serverless::StateMachine":
@@ -187,13 +188,23 @@ class SamTemplateValidator:
 
     @staticmethod
     def _check_definition_body(resource_property_dict):
-        body_dict = resource_property_dict.get("DefinitionBody", {})
+        # look for transform that includes a yaml definition like this:
+        # DefinitionBody:
+        #   'Fn::Transform':
+        #     Name: AWS::Include
+        #     Parameters:
+        #       Location: openapi.yaml
 
+        body_dict = resource_property_dict.get("DefinitionBody", {})
         if "Fn::Transform" not in body_dict:
             return
 
         transform_dict = body_dict.get("Fn::Transform", {})
-        if "Parameters" not in transform_dict:
+        if ("Name" not in transform_dict) or ("Parameters" not in transform_dict):
+            return
+
+        transform_name = transform_dict.get("Name", '')
+        if transform_name != "AWS::Include":
             return
 
         parameters_dict = transform_dict.get("Parameters", {})
@@ -201,6 +212,9 @@ class SamTemplateValidator:
             return
 
         location_prop = parameters_dict.get("Location", ".")
+        if (not location_prop.endswith('yaml') and not location_prop.endswith('yml')) \
+            or not os.path.isfile(location_prop):
+            return
 
         try:
             definition_body = parse_yaml_file(location_prop)
@@ -209,4 +223,4 @@ class SamTemplateValidator:
             resource_property_dict["DefinitionBody"] = definition_body
             LOG.debug("Imported definition body from %s", location_prop)
         except Exception as e:
-            LOG.debug("Error importing definition body from %s -> %s", location_prop, e.message)
+            LOG.debug("Error importing definition body from %s: %s", location_prop, e)
