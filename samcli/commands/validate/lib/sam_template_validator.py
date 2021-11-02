@@ -66,6 +66,7 @@ class SamTemplateValidator:
 
         self._replace_local_codeuri()
         self._replace_local_image()
+        self._replace_local_openapi()
 
         try:
             template = sam_translator.translate(sam_template=self.sam_template, parameter_values={})
@@ -114,14 +115,10 @@ class SamTemplateValidator:
             if resource_type == "AWS::Serverless::Api":
                 if "DefinitionUri" in resource_dict:
                     SamTemplateValidator._update_to_s3_uri("DefinitionUri", resource_dict)
-                if "DefinitionBody" in resource_dict and "CorsConfiguration" in resource_dict:
-                    SamTemplateValidator._check_definition_body(resource_dict)
 
             if resource_type == "AWS::Serverless::HttpApi":
                 if "DefinitionUri" in resource_dict:
                     SamTemplateValidator._update_to_s3_uri("DefinitionUri", resource_dict)
-                if "DefinitionBody" in resource_dict and "CorsConfiguration" in resource_dict:
-                    SamTemplateValidator._check_definition_body(resource_dict)
 
             if resource_type == "AWS::Serverless::StateMachine":
                 if "DefinitionUri" in resource_dict:
@@ -143,6 +140,32 @@ class SamTemplateValidator:
             if is_image_function and is_local_image:
                 if "ImageUri" not in properties:
                     properties["ImageUri"] = "111111111111.dkr.ecr.region.amazonaws.com/repository"
+
+    def _replace_local_openapi(self):
+        """
+        Applies Transform Include of DefinitionBody.
+        Without this validation fails.
+        """
+        # look for transform that includes a yaml definition like this:
+        # DefinitionBody:
+        #   'Fn::Transform':
+        #     Name: AWS::Include
+        #     Parameters:
+        #       Location: openapi.yaml
+        resources = self.sam_template.get("Resources", {})
+        for _, resource in resources.items():
+            if not resource.get("Type") in "AWS::Serverless::Api,AWS::Serverless::HttpApi":
+                continue
+
+            transform_dict = resource.get("Properties", {}).get("DefinitionBody", {}).get("Fn::Transform", {})
+            if transform_dict.get("Name", "") != "AWS::Include":
+                continue
+
+            location_prop = transform_dict.get("Parameters", {}).get("Location", "")
+            if not os.path.isfile(location_prop):
+                continue
+
+            SamTemplateValidator._replace_with_file_contents(resource.get("Properties", {}), location_prop)
 
     @staticmethod
     def is_s3_uri(uri):
@@ -187,40 +210,9 @@ class SamTemplateValidator:
         resource_property_dict[property_key] = s3_uri_value
 
     @staticmethod
-    def _check_definition_body(resource_property_dict):
-        # look for transform that includes a yaml definition like this:
-        # DefinitionBody:
-        #   'Fn::Transform':
-        #     Name: AWS::Include
-        #     Parameters:
-        #       Location: openapi.yaml
+    def _replace_with_file_contents(resource_property_dict, location_prop):
+        definition_body = parse_yaml_file(location_prop)
 
-        body_dict = resource_property_dict.get("DefinitionBody", {})
-        if "Fn::Transform" not in body_dict:
-            return
-
-        transform_dict = body_dict.get("Fn::Transform", {})
-        if ("Name" not in transform_dict) or ("Parameters" not in transform_dict):
-            return
-
-        transform_name = transform_dict.get("Name", '')
-        if transform_name != "AWS::Include":
-            return
-
-        parameters_dict = transform_dict.get("Parameters", {})
-        if "Location" not in parameters_dict:
-            return
-
-        location_prop = parameters_dict.get("Location", ".")
-        if (not location_prop.endswith('yaml') and not location_prop.endswith('yml')) \
-            or not os.path.isfile(location_prop):
-            return
-
-        try:
-            definition_body = parse_yaml_file(location_prop)
-
-            # replace the definition body from the file
-            resource_property_dict["DefinitionBody"] = definition_body
-            LOG.debug("Imported definition body from %s", location_prop)
-        except Exception as e:
-            LOG.debug("Error importing definition body from %s: %s", location_prop, e)
+        # replace the definition body from the file
+        resource_property_dict["DefinitionBody"] = definition_body
+        LOG.debug("Imported definition body from %s", location_prop)
