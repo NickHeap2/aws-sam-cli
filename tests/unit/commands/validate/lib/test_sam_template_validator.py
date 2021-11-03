@@ -7,7 +7,6 @@ from samtranslator.public.exceptions import InvalidDocumentException
 from samcli.commands.validate.lib.exceptions import InvalidSamDocumentException
 from samcli.commands.validate.lib.sam_template_validator import SamTemplateValidator
 
-
 class TestSamTemplateValidator(TestCase):
     @patch("samcli.commands.validate.lib.sam_template_validator.Session")
     @patch("samcli.commands.validate.lib.sam_template_validator.Translator")
@@ -408,42 +407,8 @@ class TestSamTemplateValidator(TestCase):
 
         template_resources = validator.sam_template.get("Resources")
         self.assertIn("DefinitionBody", template_resources.get("ServerlessApi").get("Properties"))
-        self.assertNotIn("openapi", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody"))
-        self.assertIn("Fn::Transform", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody"))
-
-
-    def test_DefinitionBody_not_replaced_if_not_valid_yaml(self):
-        template = {
-            "AWSTemplateFormatVersion": "2010-09-09",
-            "Transform": "AWS::Serverless-2016-10-31",
-            "Resources": {
-                "ServerlessApi": {
-                    "Type": "AWS::Serverless::HttpApi",
-                    "Properties": {
-                        "StageName": "Prod",
-                        "DefinitionBody": {
-                            "Fn::Transform": {
-                                "Name": "AWS::Include",
-                                "Parameters": {
-                                    "Location": "./tests/unit/commands/validate/lib/openapi/openapi.yaml"
-                                }
-                            }
-                        }
-                    },
-                }
-            },
-        }
-
-        managed_policy_mock = Mock()
-
-        validator = SamTemplateValidator(template, managed_policy_mock)
-
-        validator._replace_local_openapi()
-
-        template_resources = validator.sam_template.get("Resources")
-        self.assertIn("DefinitionBody", template_resources.get("ServerlessApi").get("Properties"))
-        self.assertNotIn("openapi", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody"))
-        self.assertIn("Fn::Transform", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody"))
+        self.assertNotIn("Fn::Transform", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody"))
+        self.assertIn("openapi", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody"))
 
     def test_DefinitionBody_not_replaced_if_not_include(self):
         template = {
