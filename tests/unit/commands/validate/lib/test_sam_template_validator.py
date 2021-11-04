@@ -7,6 +7,7 @@ from samtranslator.public.exceptions import InvalidDocumentException
 from samcli.commands.validate.lib.exceptions import InvalidSamDocumentException
 from samcli.commands.validate.lib.sam_template_validator import SamTemplateValidator
 
+
 class TestSamTemplateValidator(TestCase):
     @patch("samcli.commands.validate.lib.sam_template_validator.Session")
     @patch("samcli.commands.validate.lib.sam_template_validator.Translator")
@@ -306,15 +307,12 @@ class TestSamTemplateValidator(TestCase):
         # check template
         self.assertEqual(validator.sam_template.get("Resources"), {})
 
-
     def test_DefinitionBody_gets_replaced_in_api(self):
         template = {
             "AWSTemplateFormatVersion": "2010-09-09",
             "Transform": "AWS::Serverless-2016-10-31",
             "Resources": {
-                "ServerlessFunction": {
-                    "Type": "AWS::Serverless::Function"
-                },
+                "ServerlessFunction": {"Type": "AWS::Serverless::Function"},
                 "ServerlessApi": {
                     "Type": "AWS::Serverless::Api",
                     "Properties": {
@@ -322,13 +320,11 @@ class TestSamTemplateValidator(TestCase):
                         "DefinitionBody": {
                             "Fn::Transform": {
                                 "Name": "AWS::Include",
-                                "Parameters": {
-                                    "Location": "./tests/unit/commands/validate/lib/openapi/openapi.yaml"
-                                }
+                                "Parameters": {"Location": "./tests/unit/commands/validate/lib/openapi/openapi.yaml"},
                             }
-                        }
+                        },
                     },
-                }
+                },
             },
         }
 
@@ -340,7 +336,9 @@ class TestSamTemplateValidator(TestCase):
 
         template_resources = validator.sam_template.get("Resources")
         self.assertIn("DefinitionBody", template_resources.get("ServerlessApi").get("Properties"))
-        self.assertNotIn("Fn::Transform", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody"))
+        self.assertNotIn(
+            "Fn::Transform", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody")
+        )
         self.assertIn("openapi", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody"))
 
     def test_DefinitionBody_not_replaced_if_file_not_found(self):
@@ -355,11 +353,9 @@ class TestSamTemplateValidator(TestCase):
                         "DefinitionBody": {
                             "Fn::Transform": {
                                 "Name": "AWS::Include",
-                                "Parameters": {
-                                    "Location": "./tests/unit/commands/validate/lib/openapi/notafile.yaml"
-                                }
+                                "Parameters": {"Location": "./tests/unit/commands/validate/lib/openapi/notafile.yaml"},
                             }
-                        }
+                        },
                     },
                 }
             },
@@ -376,7 +372,6 @@ class TestSamTemplateValidator(TestCase):
         self.assertNotIn("openapi", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody"))
         self.assertIn("Fn::Transform", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody"))
 
-
     def test_DefinitionBody_gets_replaced_if_json(self):
         template = {
             "AWSTemplateFormatVersion": "2010-09-09",
@@ -389,11 +384,9 @@ class TestSamTemplateValidator(TestCase):
                         "DefinitionBody": {
                             "Fn::Transform": {
                                 "Name": "AWS::Include",
-                                "Parameters": {
-                                    "Location": "./tests/unit/commands/validate/lib/openapi/openapi.json"
-                                }
+                                "Parameters": {"Location": "./tests/unit/commands/validate/lib/openapi/openapi.json"},
                             }
-                        }
+                        },
                     },
                 }
             },
@@ -407,7 +400,9 @@ class TestSamTemplateValidator(TestCase):
 
         template_resources = validator.sam_template.get("Resources")
         self.assertIn("DefinitionBody", template_resources.get("ServerlessApi").get("Properties"))
-        self.assertNotIn("Fn::Transform", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody"))
+        self.assertNotIn(
+            "Fn::Transform", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody")
+        )
         self.assertIn("openapi", template_resources.get("ServerlessApi").get("Properties").get("DefinitionBody"))
 
     def test_DefinitionBody_not_replaced_if_not_include(self):
@@ -423,7 +418,7 @@ class TestSamTemplateValidator(TestCase):
                             "Fn::Transform": {
                                 "Name": "AWS::NotInclude",
                             }
-                        }
+                        },
                     },
                 }
             },
